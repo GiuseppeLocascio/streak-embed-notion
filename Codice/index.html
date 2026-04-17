@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Notion Streak Widget</title>
+    <style>
+        body, html {
+            margin: 0; padding: 0;
+            width: 100%; height: 100%;
+            display: flex; justify-content: center; align-items: center;
+            background-color: transparent; overflow: hidden;
+        }
+        #widget-container {
+            width: 100%; height: 100%;
+            display: flex; justify-content: center; align-items: center;
+        }
+        #streak-gif {
+            max-width: 100%; max-height: 100%;
+            object-fit: contain;
+            filter: drop-shadow(0 0 15px rgba(255, 255, 255, 0.2));
+            display: block;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="widget-container">
+        <img id="streak-gif" src="Assets/Streak_Inactive.gif">
+    </div>
+
+<script>
+    // --- CONFIGURAZIONE ---
+    const ASSET_PATH = "Assets/"; 
+    const TRANSITION_TIME = 3500; // Millisecondi durata delle tue transizioni
+    const API_ENDPOINT = "IL_TUO_URL_DI_PIPEDREAM_O_WORKER";
+
+    let currentState = {
+        level: "",    // One_Day, One_Week, etc.
+        mode: "",     // Inactive, Completed, Frozen
+        isAnimating: false
+    };
+
+    function getStreakLevel(days) {
+        if (days >= 180) return "Six_Month";
+        if (days >= 90)  return "Three_Month";
+        if (days >= 30)  return "One_Month";
+        if (days >= 7)   return "One_Week";
+        if (days >= 1)   return "One_Day";
+        return "Inactive";
+    }
+
+    async function fetchNotionData() {
+        if (currentState.isAnimating) return;
+
+        try {
+            const response = await fetch(API_ENDPOINT);
+            const data = await response.json();
+            updateWidget(data.streak, data.tasksToday, data.isFrozen);
+        } catch (error) {
+            console.error("Errore API Notion:", error);
+        }
+    }
+
+    function updateWidget(streakDays, tasksToday, isFrozen) {
+        const level = getStreakLevel(streakDays);
+        const img = document.getElementById('streak-gif');
+
+        if (level === "Inactive") {
+            setImg(img, "Streak_Inactive.gif", "Inactive", "Inactive");
+            return;
+        }
+
+        // CASO 6: Ripresa durante blocco
+        if (currentState.mode === "Frozen" && tasksToday >= 1) {
+            playSequence(img, `Streak_Frozen_Break_${level}.gif`, `Streak_Loop_Completed_${level}.gif`, "Completed", level);
+            return;
+        }
+
+        // CASO 4 & 5: Congelamento
+        if (isFrozen) {
+            if (currentState.mode !== "Frozen") {
+                playSequence(img, `Transition_Streak_Frozen_${level}.gif`, `Static_Streak_Frozen_${level}.gif`, "Frozen", level);
+            }
+            return;
+        }
+
+        // CASO 2 & 3: Task Completata (Multi-task safe)
+        if (tasksToday >= 1) {
+            if (currentState.mode !== "Completed" || currentState.level !== level) {
+                playSequence(img, `Streak_Transition_Completed_${level}.gif`, `Streak_Loop_Completed_${level}.gif`, "Completed", level);
+            }
+            return;
+        }
+
+        // DEFAULT: Inattivo
+        if (tasksToday === 0 && !isFrozen) {
+            setImg(img, "Streak_Inactive.gif", "Inactive", "Inactive");
+        }
+    }
+
+    function setImg(el, file, mode, level) {
+        const fullPath = ASSET_PATH + file;
+        if (!el.src.includes(file)) {
+            el.src = fullPath;
+            currentState.mode = mode;
+            currentState.level = level;
+        }
+    }
+
+    function playSequence(imgElement, transFile, loopFile, nextMode, nextLevel) {
+        currentState.isAnimating = true;
+        imgElement.src = ASSET_PATH + transFile;
+
+        setTimeout(() => {
+            imgElement.src = ASSET_PATH + loopFile;
+            currentState.mode = nextMode;
+            currentState.level = nextLevel;
+            currentState.isAnimating = false;
+        }, TRANSITION_TIME);
+    }
+
+    // Controlla Notion ogni 30 secondi
+    setInterval(fetchNotionData, 30000);
+    fetchNotionData();
+</script>
+</body>
+</html>
